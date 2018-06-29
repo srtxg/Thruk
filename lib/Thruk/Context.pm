@@ -100,6 +100,16 @@ sub log {
     return($_[0]->app->log);
 }
 
+=head2 cluster
+
+return cluster object
+
+=cut
+sub cluster {
+    return($_[0]->app->cluster);
+}
+
+
 =head2 detach
 
 detach to other controller

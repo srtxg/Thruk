@@ -157,6 +157,7 @@ sub _build_app {
     $self->set_timezone();
     $self->_set_ssi();
     $self->_setup_pidfile();
+    $self->_setup_cluster();
 
     ###################################################
     # create backends
@@ -285,7 +286,7 @@ sub _dispatcher {
     }
     local $ENV{'THRUK_PERFORMANCE_DEBUG'} = 1 if $enable_profiles;
     $c->stats->profile(begin => "_dispatcher: ".$c->req->url);
-    $c->stats->profile(comment => sprintf('local time: %s - pid: %s - req: %s', (scalar localtime), $$, $Thruk::COUNT));
+    $c->stats->profile(comment => sprintf('time: %s - host: %s - pid: %s - req: %s', (scalar localtime), $c->config->{'hostname'}, $$, $Thruk::COUNT));
 
     if(Thruk->verbose) {
         $c->log->debug($c->req->url);
@@ -372,6 +373,22 @@ sub config {
     }
     return($config);
 }
+
+###################################################
+
+=head2 cluster
+
+    make cluster accessible via Thruk->cluster
+
+=cut
+sub cluster {
+    my($self) = @_;
+    return($self->{'_cluster'}) if $self->{'_cluster'};
+    require Thruk::Utils::Cluster;
+    $self->{'_cluster'} = Thruk::Utils::Cluster->new($self, $self->config->{'cluster_node'});
+    return($self->{'_cluster'});
+}
+
 
 ###################################################
 
@@ -617,6 +634,19 @@ sub set_timezone {
     ## use critic
     POSIX::tzset();
 
+    return;
+}
+
+###################################################
+# create cluster files
+sub _setup_cluster {
+    my($self) = @_;
+    load Digest::MD5, qw(md5_hex);
+    chomp(my $hostname = `hostname`);
+    chomp(my $pwd      = `pwd`);
+    $self->config->{'hostname'} = $hostname unless $self->config->{'hostname'};
+    $Thruk::HOSTNAME            = $self->config->{'hostname'};
+    $Thruk::NODE_ID             = md5_hex($self->config->{'hostname'}."-".$pwd."-".($ENV{'THRUK_CONFIG'} || '.'));
     return;
 }
 

@@ -378,7 +378,7 @@ return untainted variable
 
 sub untaint {
     my($v) = @_;
-    if($v =~ /\A(.*)\z/msx) { $v = $1; }
+    if($v && $v =~ /\A(.*)\z/msx) { $v = $1; }
     return($v);
 }
 

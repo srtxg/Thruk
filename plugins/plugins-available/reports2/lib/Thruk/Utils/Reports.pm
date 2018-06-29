@@ -24,6 +24,7 @@ use Encode qw(encode_utf8 decode_utf8 encode);
 use Storable qw/dclone/;
 use File::Temp qw/tempfile/;
 use Cwd qw//;
+use Digest::MD5 qw(md5_hex);
 
 ##########################################################
 
@@ -341,7 +342,7 @@ sub report_remove {
     clean_report_tmp_files($c, $nr);
 
     # remove cron entries
-    Thruk::Utils::Reports::update_cron_file($c);
+    update_cron_file($c);
 
     return 1;
 }
@@ -603,7 +604,7 @@ sub generate_report {
     }
 
     if($options->{'var'}->{'send_mails_next_time'} && $send_mail_threshold_reached) {
-        Thruk::Utils::Reports::report_send($c, $nr, 1);
+        report_send($c, $nr, 1);
     }
 
     # update report runtime data
@@ -645,6 +646,7 @@ Queue will only be used if all slots are busy.
 returns 1 if queue is used or undef if there are free slots.
 
 =cut
+# TODO: check in cluster mode
 sub queue_report_if_busy {
     my($c, $nr, $with_mails) = @_;
 
@@ -681,7 +683,7 @@ sub process_queue_file {
             if($line =~ m/^(report|reportmail)=(\d+)$/mx) {
                 my $nr   = $2;
                 my $mail = $1 eq 'reportmail' ? 1 : 0;
-                Thruk::Utils::Reports::queue_report($c, $nr, $mail);
+                queue_report($c, $nr, $mail);
             }
         }
     }
@@ -808,7 +810,7 @@ sub update_cron_file {
     my $max_concurrent_reports = $c->config->{'Thruk::Plugin::Reports2'}->{'max_concurrent_reports'} || 2;
     my $combined = [];
     my $dir = $c->config->{'var_path'}."/reports/";
-    unlink(glob($dir.'/*.sh'));
+    unlink(glob($dir.'/report*.sh'));
     for my $time (keys %{$cron_entries}) {
         if(scalar @{$cron_entries->{$time}} <= $max_concurrent_reports) {
             for my $entry (@{$cron_entries->{$time}}) {
@@ -832,7 +834,7 @@ sub update_cron_file {
                 }
                 $x++;
             }
-            my(undef, $filename) = tempfile( 'reportXXXXX', DIR => $dir, SUFFIX => '.sh');
+            my $filename = sprintf("%s/report_%s.sh", $dir, substr(md5_hex($time), 5));
             Thruk::Utils::IO::write($filename, "#!/bin/sh\n\n".join("\n", @{$cron_entries->{$time}}));
             push @{$combined}, [$time, 'cd '.$c->config->{'project_root'}.' && '.$filename];
             Thruk::Utils::IO::ensure_permissions(oct(770), $filename);
@@ -854,7 +856,14 @@ update running state of report
 sub set_running {
     my($c, $nr, $val, $start, $end, $job) = @_;
     my $options = _read_report_file($c, $nr);
-    $options->{'var'}->{'is_running'} = $val   if defined $val;
+    if(defined $val) {
+        $options->{'var'}->{'is_running'} = $val;
+        if($val == 0) {
+            delete $options->{'var'}->{'running_node'};
+        } else {
+            $options->{'var'}->{'running_node'} = $Thruk::NODE_ID;
+        }
+    }
     $options->{'var'}->{'start_time'} = $start if defined $start;
     $options->{'var'}->{'end_time'}   = $end   if defined $end;
     $options->{'var'}->{'job'}        = $ENV{'THRUK_JOB_ID'} if defined $ENV{'THRUK_JOB_ID'};
@@ -1090,6 +1099,10 @@ sub _report_save {
     $report->{'backends'} = Thruk::Utils::backends_list_to_hash($c, ($report->{'backends_hash'} || $report->{'backends'}));
     delete $report->{'backends_hash'};
 
+    if(!$report->{'user'}) {
+        confess("tried to save report without user");
+    }
+
     Thruk::Utils::write_data_file($file, $report);
 
     $report->{'backends_hash'} = $report->{'backends'};
@@ -1167,7 +1180,7 @@ sub _read_report_file {
     $report->{'is_public'}  = 0 unless defined $report->{'is_public'};
 
     # check if its really running
-    if($report->{'var'}->{'is_running'} and kill(0, $report->{'var'}->{'is_running'}) != 1) {
+    if($report->{'var'}->{'is_running'} and $c->cluster->kill($c, $report->{'var'}->{'running_node'}, 0, $report->{'var'}->{'is_running'}) != 1) {
         $report->{'var'}->{'is_running'} = 0;
         $needs_save = 1;
     }
@@ -1363,6 +1376,8 @@ sub _convert_to_pdf {
     if($c->stash->{'param'}->{'pdf'}) {
         $autoscale = 1;
     }
+# TODO: remove
+sleep(20);
     local $ENV{PHANTOMJSSCRIPTOPTIONS} = '--autoscale=1' if $autoscale;
     my $cmd = $c->config->{home}.'/script/html2pdf.sh "'.$htmlfile.'" "'.$attachment.'.pdf" "'.$logfile.'" "'.$phantomjs.'"';
     my $out = `$cmd 2>&1`;

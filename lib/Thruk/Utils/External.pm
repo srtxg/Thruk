@@ -222,7 +222,7 @@ sub is_running {
         return unless $user eq $c->stash->{'remote_user'};
     }
 
-    return _is_running($dir);
+    return _is_running($c, $dir);
 }
 
 
@@ -249,6 +249,17 @@ sub cancel {
 
     my $pidfile = $dir."/pid";
     if(-f $pidfile) {
+
+        # is it running on this node?
+        if(-s $dir."/hostname") {
+            my @hosts = split(/\n/mx, read_file($dir."/hostname"));
+            if($hosts[0] ne $Thruk::NODE_ID) {
+                # TODO: check
+                $c->cluster->run_cluster($hosts[0], 'Thruk::Utils::External::cancel', [$c, $id, $nouser]);
+                return _is_running($c, $dir);
+            }
+        }
+
         my $pid = read_file($pidfile);
         update_status($dir, 99.9, 'canceled');
         kill(-15, $pid);
@@ -256,7 +267,7 @@ sub cancel {
         kill(-2, $pid);
         sleep(1);
     }
-    return _is_running($dir);
+    return _is_running($c, $dir);
 }
 
 
@@ -288,7 +299,7 @@ sub get_status {
         return unless $user eq $c->stash->{'remote_user'};
     }
 
-    my $is_running = _is_running($dir);
+    my $is_running = _is_running($c, $dir);
     # dev ino mode nlink uid gid rdev size atime mtime ctime blksize blocks
     my @start      = stat($dir.'/start');
     my $time       = time() - $start[9];
@@ -602,6 +613,12 @@ sub _do_parent_stuff {
     print $fh "\n";
     Thruk::Utils::IO::close($fh, $pidfile);
 
+    # write hostname file
+    my $hostfile = $dir."/hostname";
+    open($fh, '>', $hostfile) or die("cannot write pid $hostfile: $!");
+    print $fh $Thruk::NODE_ID, "\n", $Thruk::HOSTNAME, "\n";
+    Thruk::Utils::IO::close($fh, $hostfile);
+
     # write start file
     my $startfile = $dir."/start";
     open($fh, '>', $startfile) or die("cannot write start $startfile: $!");
@@ -684,16 +701,30 @@ sub _init_external {
 
 =head2 _is_running
 
-  _is_running($dir)
+  _is_running($c, $dir)
 
 return true if process is still running
 
 =cut
 sub _is_running {
-    my $dir = shift;
+    my($c, $dir) = @_;
+    confess("no dir") unless $dir;
     $dir = Thruk::Utils::IO::untaint($dir);
 
     return 0 unless -s $dir."/pid";
+
+    # assume it is still running if running on a different node
+    if(-s $dir."/hostname") {
+        my @hosts = split(/\n/mx, read_file($dir."/hostname"));
+        if($hosts[0] ne $Thruk::NODE_ID) {
+            confess('clustered _is_running requires $c') unless $c;
+            my $res = $c->cluster->run_cluster($hosts[0], 'Thruk::Utils::External::_is_running', [$c, $dir]);
+            if($res && exists $res->[0]) {
+                return(@{$res->[0]});
+            }
+            return(0);
+        }
+    }
 
     my $pid = read_file($dir."/pid");
     $pid = Thruk::Utils::IO::untaint($pid);

@@ -280,7 +280,7 @@ sub get_config {
     if(scalar @files == 0) {
         for my $path ($ENV{'THRUK_CONFIG'}, '.') {
             next unless defined $path;
-            push @files, $path.'/thruk.conf'       if -f $path.'/thruk.conf';
+            push @files, $path.'/thruk.conf' if -f $path.'/thruk.conf';
             if(-d $path.'/thruk_local.d') {
                 my @tmpfiles = sort glob($path.'/thruk_local.d/*');
                 for my $tmpfile (@tmpfiles) {
@@ -408,6 +408,7 @@ sub set_default_config {
         bug_email_rcpt                  => 'bugs@thruk.org',
         home_link                       => 'http://www.thruk.org',
         plugin_registry_url             => ['https://api.thruk.org/v1/plugin/list'],
+        cluster_node                    => [],
         mode_file                       => '0660',
         mode_dir                        => '0770',
         backend_debug                   => 0,
@@ -630,8 +631,8 @@ sub set_default_config {
     # make show_custom_vars a list
     $config->{'show_custom_vars'} = array_uniq([split(/\s*,\s*/mx, join(",", @{list($config->{'show_custom_vars'})}))]);
 
-    # make graph_replace a list
-    for my $key (qw/graph_replace commandline_obfuscate_pattern/) {
+    # make some settings a list
+    for my $key (qw/graph_replace commandline_obfuscate_pattern cluster_node/) {
         $config->{$key} = [@{list($config->{$key})}];
     }
 

@@ -27,6 +27,8 @@ The report command creates reports from the command line.
 use warnings;
 use strict;
 use File::Slurp qw/read_file/;
+use Thruk::Utils::IO;
+use Thruk::Utils::External;
 
 ##############################################
 
@@ -59,6 +61,22 @@ sub cmd {
     if($@) {
         return("reports plugin is not enabled.\n", 1);
     }
+
+    # this function must be run on one cluster node only
+    return("command send to cluster\n", 0) if $c->cluster->run_cluster("once", sprintf("cmd: report %s%s", ($mail ? "mail " : ''), $nr));
+
+    # create fake job when run from cron to save profile
+    if(!$ENV{'THRUK_JOB_ID'}) {
+        my($id,$dir) = Thruk::Utils::External::_init_external($c);
+        ## no critic
+        $SIG{CHLD} = 'DEFAULT';
+        Thruk::Utils::External::_do_parent_stuff($c, $dir, $$, $id, { allow => 'all', background => 1});
+        $ENV{'THRUK_JOB_ID'}       = $id;
+        $ENV{'THRUK_JOB_DIR'}      = $dir;
+        ## use critic
+        Thruk::Utils::IO::write($dir.'/stdout', "fake job create\n");
+    }
+
     my $logfile = $c->config->{'var_path'}.'/reports/'.$nr.'.log';
     # set waiting flag for queued reports, so the show up nicely in the gui
     Thruk::Utils::Reports::process_queue_file($c);

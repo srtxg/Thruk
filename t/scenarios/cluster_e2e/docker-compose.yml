@@ -1,0 +1,45 @@
+version: '2'
+
+services:
+  nginx:
+    build: nginx/
+    ports:
+        - 60080:80
+  omd:
+    build: omd/
+    environment:
+        - TZ=Europe/Berlin
+    volumes:
+        - /etc/localtime:/etc/localtime:ro
+        - shared_var:/mnt/var
+  thruk1:
+    build: thruk/
+    environment:
+        - TZ=Europe/Berlin
+    volumes:
+        - /etc/localtime:/etc/localtime:ro
+        - ../../../:/thruk:ro
+        - shared_var:/mnt/var
+        - shared_etc:/mnt/etc
+  thruk2:
+    build: thruk/
+    environment:
+        - TZ=Europe/Berlin
+    volumes:
+        - /etc/localtime:/etc/localtime:ro
+        - ../../../:/thruk:ro
+        - shared_var:/mnt/var
+        - shared_etc:/mnt/etc
+  thruk3:
+    build: thruk/
+    environment:
+        - TZ=Europe/Berlin
+    volumes:
+        - /etc/localtime:/etc/localtime:ro
+        - ../../../:/thruk:ro
+        - shared_var:/mnt/var
+        - shared_etc:/mnt/etc
+
+volumes:
+  shared_etc:
+  shared_var:

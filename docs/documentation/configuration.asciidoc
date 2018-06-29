@@ -192,6 +192,19 @@ ex.:
   default_user_timezone = "Server Setting"
 
 
+=== cluster_node
+{% include new_since.ad version="2.22" %}
+List all nodes for clustered setups. Those instances need to share
+their var_path and etc_path on a shared filesystem. tmp_path must
+remain local.
+link:cluster.html[Read more about clusters here].
+
+ex.:
+
+  cluster_node = https://node1.company/thruk/
+  cluster_node = https://node2.company/thruk/
+
+
 === mobile_agent
 Specify user agents which will be redirected to the mobile plugin (if
 enabled).
